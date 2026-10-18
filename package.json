@@ -1,0 +1,42 @@
+{
+  "name": "paperclip-plugin-opencode-watchdog",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Event-driven OpenCode free-model watchdog: opens ONE rescue issue for the CTO when an opencode_local agent's run fails because its model is gone or no longer free.",
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "scripts",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node ./esbuild.config.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run build"
+  },
+  "paperclipPlugin": {
+    "manifest": "./dist/manifest.js",
+    "worker": "./dist/worker.js"
+  },
+  "keywords": [
+    "paperclip",
+    "plugin"
+  ],
+  "author": "Platform <platform@paperclip.ing>",
+  "license": "MIT",
+  "pnpm": {
+    "overrides": {
+      "@paperclipai/shared": "file:.paperclip-sdk/paperclipai-shared-2026.924.1-fork51.2.tgz"
+    }
+  },
+  "devDependencies": {
+    "@paperclipai/plugin-sdk": "file:.paperclip-sdk/paperclipai-plugin-sdk-2026.924.1-fork51.2.tgz",
+    "@paperclipai/shared": "file:.paperclip-sdk/paperclipai-shared-2026.924.1-fork51.2.tgz",
+    "@types/node": "^24.6.0",
+    "esbuild": "^0.27.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

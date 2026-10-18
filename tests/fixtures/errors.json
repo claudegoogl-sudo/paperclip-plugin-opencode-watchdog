@@ -1,0 +1,56 @@
+{
+ "_note": "Strings derived from adapter source (packages/adapters/opencode-local) and the Zen free-tier error names. Live-observed strings from the induced OpenCodeTest failure are appended under `observed` when captured.",
+ "positive": [
+  {
+   "errorCode": null,
+   "error": "Configured OpenCode model is unavailable: opencode/glm-5.3-flash-free. Available models: opencode/big-pickle, opencode/beam-free, ..."
+  },
+  {
+   "errorCode": "adapter_failed",
+   "error": "ProviderModelNotFoundError: ProviderModelNotFoundError"
+  },
+  {
+   "errorCode": null,
+   "error": "Error: model glm-5.3-flash-free does not exist"
+  },
+  {
+   "errorCode": null,
+   "error": "FreeTierError: free usage exceeded, subscribe to continue"
+  },
+  {
+   "errorCode": null,
+   "error": "The free model is no longer free"
+  },
+  {
+   "errorCode": null,
+   "error": "Request to https://opencode.ai/zen/v1/chat/completions failed with 429 Too Many Requests"
+  },
+  {
+   "errorCode": null,
+   "error": "Zen upstream returned 503 Service Unavailable"
+  }
+ ],
+ "negative": [
+  {
+   "errorCode": "timeout",
+   "error": "Timed out after 300s"
+  },
+  {
+   "errorCode": null,
+   "error": "Process exited with code 1"
+  },
+  {
+   "errorCode": null,
+   "error": "ENOENT: no such file or directory, open 'x.txt'"
+  },
+  {
+   "errorCode": null,
+   "error": "File not found: e2b-adapter-result.txt"
+  },
+  {
+   "errorCode": null,
+   "error": "git push rejected (403) by github.com"
+  }
+ ],
+ "observed": []
+}
