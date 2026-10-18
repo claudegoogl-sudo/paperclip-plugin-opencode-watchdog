@@ -6,7 +6,7 @@ Internal Platform tooling. Same review bar as `paperclipai/paperclip`, minus the
 
 This repo is **PRIVATE**.
 
-Internal ticket ids (`PLA-1234`) and instance links (`/PLA/issues/...`) are allowed and encouraged in PR titles, branch names, and descriptions — they are the most useful cross-reference we have and there is no public exposure. Do not paste secrets, credentials, or vault material regardless.
+This repo is public. Do not put internal ticket ids (`PLA-1234`), instance links, localhost/tailnet URLs, or secrets in branch names, PR titles, descriptions, or commit messages. Use descriptive names (`fix/...`, `docs/...`).
 
 ## PR template
 
