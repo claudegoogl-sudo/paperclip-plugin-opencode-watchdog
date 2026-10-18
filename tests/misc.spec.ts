@@ -21,7 +21,12 @@ describe("manifest", () => {
 describe("config", () => {
   it("garbage -> safe defaults (proactive off, dry run off)", () => {
     const c = parseConfig({ proactiveEnabled: "yes", debounceHours: -1, zenModelsUrl: "http://evil", agentAllowlist: ["nope"] });
-    expect(c).toMatchObject({ proactiveEnabled: false, debounceHours: 1, agentAllowlist: [], zenModelsUrl: "https://opencode.ai/zen/v1/models" });
+    expect(c).toMatchObject({ proactiveEnabled: false, debounceHours: 1, agentAllowlist: [], agentDenylist: [], zenModelsUrl: "https://opencode.ai/zen/v1/models" });
+  });
+  it("agentDenylist keeps uuids, drops junk, defaults to []", () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    expect(parseConfig({}).agentDenylist).toEqual([]);
+    expect(parseConfig({ agentDenylist: [id, "nope", 5] }).agentDenylist).toEqual([id]);
   });
 });
 

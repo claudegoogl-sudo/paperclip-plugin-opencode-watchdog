@@ -50,6 +50,7 @@ const plugin = definePlugin({
       snapshot: () => fetchModelSnapshot(fetcher, { zenUrl: cfgRef.zenModelsUrl, catalogUrl: cfgRef.modelsDevUrl, now: () => Date.now() }),
     });
     const eng = engine;
+    const cfgSnapshot = () => fetchModelSnapshot(fetcher, { zenUrl: cfgRef.zenModelsUrl, catalogUrl: cfgRef.modelsDevUrl, now: () => Date.now() });
     ctx.logger.info("opencode_watchdog.started", { trigger: "agent.run.failed" });
 
     ctx.events.on("agent.run.failed", async (e) => {
@@ -64,12 +65,20 @@ const plugin = definePlugin({
 
     ctx.jobs.register(JOBS.modelCheck, async () => {
       const ids: string[] = [];
-      let enabled = false;
+      let proCo: string | null = null;
+      let newCo: string | null = null;
       for (const c of (await ctx.companies.list({ limit: 500 })) as unknown as Rec[]) {
-        try { if ((await loadConfig(ctx, String(c.id))).proactiveEnabled) enabled = true; ids.push(String(c.id)); } catch { /* not configured */ }
+        try {
+          const cf = await loadConfig(ctx, String(c.id));
+          if (cf.proactiveEnabled) proCo = String(c.id);
+          if (cf.newModelWatchEnabled && !newCo) newCo = String(c.id);
+          ids.push(String(c.id));
+        } catch { /* not configured */ }
       }
-      if (!enabled) return; // flag off: silent exit, no reads, no writes
-      await eng.proactive(ids);
+      if (!proCo && !newCo) return; // both flags off: silent exit, no reads, no writes
+      const snap = await cfgSnapshot();
+      if (newCo) { await loadConfig(ctx, newCo); await eng.newModels(newCo, snap); }
+      if (proCo) { await loadConfig(ctx, proCo); await eng.proactive(ids, snap); }
     });
   },
   async onApiRequest(input) {

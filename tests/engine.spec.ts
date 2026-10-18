@@ -109,6 +109,27 @@ describe("AC1 event path", () => {
     expect(await t.engine.onRunFailed(failed({ agentId: other }))).toMatchObject({ why: "not_allowlisted" });
     expect(t.writes).toHaveLength(0);
   });
+  it("denylist: denied agent's failure is skipped with why=denylist, nothing written", async () => {
+    const t = mk({ cfg: { agentDenylist: [OC] } });
+    expect(await t.engine.onRunFailed(failed())).toMatchObject({ action: "skipped", why: "denylist" });
+    expect(t.writes).toHaveLength(0);
+    expect(t.logs.some((l) => l.msg === "opencode_watchdog.skipped" && l.meta?.why === "denylist" && l.meta?.agentId === OC)).toBe(true);
+  });
+  it("denylist wins over allowlist when an agent is in both", async () => {
+    const t = mk({ cfg: { agentDenylist: [OC], agentAllowlist: [OC] } });
+    expect(await t.engine.onRunFailed(failed())).toMatchObject({ why: "denylist" });
+    expect(t.writes).toHaveLength(0);
+  });
+  it("non-denied agent is still rescued when the denylist is non-empty", async () => {
+    const other = "11111111-1111-4111-8111-111111111111";
+    const t = mk({ agents: [agent(OC), agent(other), agent(CTO)], cfg: { agentDenylist: [other] } });
+    expect((await t.engine.onRunFailed(failed({ agentId: OC }))).action).toBe("created");
+    expect(t.writes).toHaveLength(1);
+  });
+  it("empty denylist = old behaviour", async () => {
+    const t = mk({ cfg: { agentDenylist: [] } });
+    expect((await t.engine.onRunFailed(failed())).action).toBe("created");
+  });
   it("dry run writes nothing", async () => {
     const t = mk({ cfg: { dryRun: true } });
     expect((await t.engine.onRunFailed(failed())).action).toBe("dry_run");
@@ -178,6 +199,14 @@ describe("AC4/AC5 proactive check", () => {
     const t = mk({ cfg: { proactiveEnabled: true }, snap: { all: ["big-pickle"], free: ["big-pickle"], fetchedAt: SNAP.fetchedAt } });
     await t.engine.proactive([CO]); await t.engine.proactive([CO]);
     expect(t.writes).toHaveLength(1);
+  });
+  it("denylist: denied agent is skipped, not rescued", async () => {
+    const other = "11111111-1111-4111-8111-111111111111";
+    const gone = { all: ["big-pickle"], free: ["big-pickle"], fetchedAt: SNAP.fetchedAt };
+    const t = mk({ agents: [agent(OC), agent(other, { adapterConfig: { model: "opencode/big-pickle" } }), agent(CTO, { adapterType: "claude_local", adapterConfig: {} })], cfg: { proactiveEnabled: true, agentDenylist: [OC] }, snap: gone });
+    expect(await t.engine.proactive([CO])).toEqual([]);
+    expect(t.writes).toHaveLength(0);
+    expect(t.logs.some((l) => l.msg === "opencode_watchdog.skipped" && l.meta?.why === "denylist" && l.meta?.agentId === OC)).toBe(true);
   });
 });
 

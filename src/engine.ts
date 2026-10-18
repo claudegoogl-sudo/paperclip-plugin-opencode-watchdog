@@ -1,6 +1,7 @@
 import type { WatchdogConfig } from "./config.js";
 import { compilePatterns, isTimeout, matchModelError, sanitizeError } from "./detect.js";
 import { existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import type { Kv } from "./kv.js";
 import { classifyModel, type ModelSnapshot } from "./zen.js";
 
@@ -21,7 +22,7 @@ export interface EngineDeps {
   getAgent(id: string, companyId: string): Promise<AgentView | null>;
   listAgents(companyId: string): Promise<AgentView[]>;
   getIssue(id: string, companyId: string): Promise<IssueView | null>;
-  createIssue(input: { companyId: string; title: string; description: string; priority: "high"; status: "todo"; assigneeAgentId: string; originKind: string; originId: string }): Promise<{ id: string; identifier?: string | null }>;
+  createIssue(input: { companyId: string; title: string; description: string; priority: "high" | "medium"; status: "todo"; assigneeAgentId: string; parentId?: string; originKind: string; originId: string }): Promise<{ id: string; identifier?: string | null }>;
   /** Free-model snapshot, or null when unavailable. */
   snapshot(): Promise<ModelSnapshot | null>;
 }
@@ -33,6 +34,8 @@ export type Outcome =
   | { action: "skipped"; why: string };
 
 const STATE_KEY = "agents";
+const FREE_KEY = "freeModels";
+const BENCH_KEY = "benchmarkIssue";
 const hourBucket = (now: number, hours: number) => Math.floor(now / (hours * 3_600_000));
 
 export class Engine {
@@ -54,6 +57,7 @@ export class Engine {
     const p = ev.payload ?? {};
     const agentId = typeof p.agentId === "string" ? p.agentId : null;
     if (!agentId || !ev.companyId) return this.skip("no_agent");
+    if (cfg.agentDenylist.includes(agentId)) return this.skip("denylist", { agentId });
     if (cfg.agentAllowlist.length && !cfg.agentAllowlist.includes(agentId)) return this.skip("not_allowlisted", { agentId });
     if (cfg.rescueAgentId && agentId === cfg.rescueAgentId) return this.skip("rescue_agent_run", { agentId });
     const agent = await this.d.getAgent(agentId, ev.companyId);
@@ -77,16 +81,17 @@ export class Engine {
   }
 
   /** Daily check (flag-gated). Read-only when healthy: one model-list GET, nothing else. */
-  async proactive(companyIds: string[]): Promise<Outcome[]> {
+  async proactive(companyIds: string[], known?: ModelSnapshot | null): Promise<Outcome[]> {
     const cfg = this.d.cfg();
     if (!cfg.proactiveEnabled) return [];
-    const snap = await this.d.snapshot();
+    const snap = known ?? (await this.d.snapshot());
     if (!snap) { this.d.log("opencode_watchdog.proactive_list_unavailable"); return []; }
     const out: Outcome[] = [];
     let checked = 0;
     for (const companyId of companyIds) {
       for (const a of await this.d.listAgents(companyId)) {
         if (a.adapterType !== "opencode_local") continue;
+        if (cfg.agentDenylist.includes(a.id)) { this.d.log("opencode_watchdog.skipped", { why: "denylist", agentId: a.id }); continue; }
         if (cfg.agentAllowlist.length && !cfg.agentAllowlist.includes(a.id)) continue;
         checked++;
         const health = classifyModel(a.adapterConfig?.model, snap);
@@ -96,6 +101,69 @@ export class Engine {
     }
     if (out.length === 0) this.d.log("opencode_watchdog.proactive_healthy", { checked, free: snap.free.length });
     return out;
+  }
+
+  /** Daily new-free-model diff (flag-gated). Healthy = one GET, zero writes. */
+  async newModels(companyId: string, known?: ModelSnapshot | null): Promise<Outcome> {
+    const cfg = this.d.cfg();
+    if (!cfg.newModelWatchEnabled) return { action: "skipped", why: "disabled" };
+    const snap = known ?? (await this.d.snapshot());
+    if (!snap) { this.d.log("opencode_watchdog.new_model_list_unavailable"); return { action: "skipped", why: "list_unavailable" }; }
+    const current = [...new Set(snap.free)].sort();
+    const base = await this.d.kv.get<string[]>(FREE_KEY);
+    if (!Array.isArray(base)) {
+      if (cfg.dryRun) { this.d.log("opencode_watchdog.dry_run", { what: "new_model_baseline_seed", free: current.length }); return { action: "dry_run", reason: "baseline_seed" }; }
+      await this.d.kv.set(FREE_KEY, current);
+      this.d.log("opencode_watchdog.new_model_baseline_seeded", { free: current.length });
+      return { action: "skipped", why: "baseline_seeded" };
+    }
+    const known0 = new Set(base);
+    const added = current.filter((id) => !known0.has(id));
+    const removed = base.filter((id) => !current.includes(id));
+    if (removed.length) this.d.log("opencode_watchdog.free_models_removed", { removed });
+    if (added.length === 0) {
+      if (removed.length && !cfg.dryRun) await this.d.kv.set(FREE_KEY, current);
+      return { action: "skipped", why: "no_new_models" };
+    }
+    const st = await this.d.kv.get<{ issueId: string; companyId: string }>(BENCH_KEY);
+    if (st?.issueId) {
+      const open = await this.d.getIssue(st.issueId, st.companyId);
+      if (open && !TERMINAL.has(open.status)) {
+        this.d.log("opencode_watchdog.new_model_benchmark_open", { issueId: st.issueId, added });
+        return { action: "skipped", why: "benchmark_open" };
+      }
+    }
+    const agents = await this.d.listAgents(companyId);
+    let assignee = cfg.benchmarkAgentId;
+    if (!assignee) assignee = agents.find((a) => a.name.toLowerCase() === cfg.benchmarkAgentName.toLowerCase())?.id ?? null;
+    if (!assignee) return this.skip("no_benchmark_agent", { added });
+    const hash = createHash("sha256").update(added.join(",")).digest("hex").slice(0, 12);
+    const originId = `${ORIGIN_PREFIX}newmodel:${hash}`;
+    const title = `Re-benchmark free OpenCode models: new free model(s) ${added.join(", ")}`;
+    if (cfg.dryRun) {
+      this.d.log("opencode_watchdog.dry_run", { what: "new_model_issue", title });
+      return { action: "dry_run", reason: "new_model" };
+    }
+    const description = [
+      `The OpenCode Zen free list gained: ${added.map((m) => `\`${m}\``).join(", ")}.`,
+      "",
+      `Snapshot time: ${snap.fetchedAt}`,
+      "",
+      "## Full current free list",
+      ...current.map((m) => `- \`opencode/${m}\``),
+      "",
+      "## What to do",
+      "Re-run the free-model benchmark including the new model(s). Task set: `/home/paperclip/work/pla-10371/bench/`.",
+      ...(removed.length ? ["", `Removed since last baseline (info only): ${removed.map((m) => `\`${m}\``).join(", ")}`] : []),
+      "",
+      `Dedupe key: \`${originId}\``,
+    ].join("\n");
+    const created = await this.d.createIssue({ companyId, title, description, priority: "medium", status: "todo", assigneeAgentId: assignee, ...(cfg.benchmarkParentIssueId ? { parentId: cfg.benchmarkParentIssueId } : {}), originKind: ORIGIN_KIND, originId });
+    await this.d.kv.set(BENCH_KEY, { issueId: created.id, companyId });
+    await this.d.kv.set(FREE_KEY, current);
+    this.d.log("opencode_watchdog.new_model_issue_created", { issueId: created.id, added });
+    this.d.metric("opencode_watchdog.new_model_issue_created");
+    return { action: "created", issueId: created.id, reason: "new_model" };
   }
 
   private async rescue(agent: AgentView, info: { reason: string; runId: string | null; error: string; matched: string | null }, known?: ModelSnapshot): Promise<Outcome> {
