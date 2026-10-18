@@ -1,7 +1,7 @@
 import type { PaperclipPluginManifestV1 } from "@paperclipai/plugin-sdk";
 import { CONFIG_SCHEMA } from "./config.js";
 
-export const VERSION = "0.2.0";
+export const VERSION = "0.2.1";
 
 /**
  * Capability set. Pinned by tests/manifest.spec.ts; changing it needs SecurityEngineer review.
