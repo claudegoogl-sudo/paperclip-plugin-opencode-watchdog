@@ -47,8 +47,12 @@ Config (JSON, per-company row or instance config; all optional):
 | `errorPatterns` | built-in list | Replaces the regex list. Invalid regexes are ignored. |
 | `debounceHours` | 1 | Max one rescue per agent per N hours. |
 | `agentAllowlist` | `[]` | Non-empty = ONLY these agent ids are ever watched. **Use this for a staged rollout (e.g. just OpenCodeTest).** |
+| `agentDenylist` | `[]` | Agent ids that are NEVER watched for rescue (skipped with `why=denylist`). Wins over `agentAllowlist`. **Use it for an agent whose model change must not be reverted, e.g. a benchmark agent running deliberate-failure model tests.** |
 | `proactiveEnabled` | false | Daily Zen list check. |
 | `zenModelsUrl`, `modelsDevUrl` | Zen / models.dev | `https://` only. `modelsDevUrl: null` skips the catalog. |
+| `newModelWatchEnabled` | `false` | Daily check; opens ONE re-benchmark issue when a new free Zen model appears. First run seeds the baseline (no issue). No new capability. |
+| `benchmarkAgentId` / `benchmarkAgentName` | `null` / `CTO` | Assignee of the re-benchmark issue (id wins). |
+| `benchmarkParentIssueId` | `null` | Optional parent for the re-benchmark issue. |
 | `snapshotDir` | null | If set, the rescue body names `<snapshotDir>/<agentId>.json` as the restore snapshot. The plugin never reads it. |
 | `dryRun` | false | Log what would be created; create nothing. |
 
