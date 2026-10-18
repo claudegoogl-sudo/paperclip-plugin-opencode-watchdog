@@ -1,6 +1,6 @@
 {
   "name": "paperclip-plugin-opencode-watchdog",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "private": true,
   "description": "Event-driven OpenCode free-model watchdog: opens ONE rescue issue for the CTO when an opencode_local agent's run fails because its model is gone or no longer free.",

@@ -12,6 +12,7 @@ describe("AC1 event path", () => {
     const w = t.writes[0] as Record<string, string>;
     expect(w.assigneeAgentId).toBe(CTO);
     expect(w.priority).toBe("high");
+    expect(w.status).toBe("todo");
     expect(w.originId).toMatch(/^opencode-watchdog:/);
     expect(w.description).toContain("run-1");
     expect(w.description).toContain("opencode/glm-5.3-flash-free");

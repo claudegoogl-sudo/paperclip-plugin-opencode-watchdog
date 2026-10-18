@@ -20,7 +20,7 @@ export interface EngineDeps {
   getAgent(id: string, companyId: string): Promise<AgentView | null>;
   listAgents(companyId: string): Promise<AgentView[]>;
   getIssue(id: string, companyId: string): Promise<IssueView | null>;
-  createIssue(input: { companyId: string; title: string; description: string; priority: "high"; assigneeAgentId: string; originKind: string; originId: string }): Promise<{ id: string; identifier?: string | null }>;
+  createIssue(input: { companyId: string; title: string; description: string; priority: "high"; status: "todo"; assigneeAgentId: string; originKind: string; originId: string }): Promise<{ id: string; identifier?: string | null }>;
   /** Free-model snapshot, or null when unavailable. */
   snapshot(): Promise<ModelSnapshot | null>;
 }
@@ -122,7 +122,7 @@ export class Engine {
         this.d.log("opencode_watchdog.dry_run", { agentId: agent.id, reason: info.reason, title });
         return { action: "dry_run", reason: info.reason };
       }
-      const created = await this.d.createIssue({ companyId: agent.companyId, title, description, priority: "high", assigneeAgentId: rescuer, originKind: ORIGIN_KIND, originId });
+      const created = await this.d.createIssue({ companyId: agent.companyId, title, description, priority: "high", status: "todo", assigneeAgentId: rescuer, originKind: ORIGIN_KIND, originId });
       const all = await this.states();
       all[agent.id] = { companyId: agent.companyId, lastRescueAt: now, rescueIssueId: created.id, previousModel: model, reason: info.reason };
       await this.d.kv.set(STATE_KEY, all);
