@@ -10,7 +10,7 @@ export const T0 = Date.UTC(2026, 9, 18, 10, 0, 0);
 export const SNAP: ModelSnapshot = { all: ["big-pickle", "glm-5.3-flash-free", "gpt-5.4"], free: ["big-pickle", "glm-5.3-flash-free"], fetchedAt: "2026-10-18T10:00:00.000Z" };
 
 export const agent = (id: string, over: Partial<AgentView> = {}): AgentView =>
-  ({ id, companyId: CO, name: id === OC ? "OpenCodeTest" : id === CTO ? "CTO" : id, adapterType: "opencode_local", adapterConfig: { model: "opencode/glm-5.3-flash-free" }, ...over });
+  ({ id, companyId: CO, name: id === OC ? "OpenCodeTest" : id === CTO ? "Concierge" : id, adapterType: "opencode_local", adapterConfig: { model: "opencode/glm-5.3-flash-free" }, ...over });
 
 export function mk(opts: { agents?: AgentView[]; cfg?: Partial<WatchdogConfig>; snap?: ModelSnapshot | null; issues?: Record<string, { status: string; originId?: string }> } = {}) {
   const agents = opts.agents ?? [agent(OC), agent(CTO, { adapterType: "claude_local", adapterConfig: {} })];

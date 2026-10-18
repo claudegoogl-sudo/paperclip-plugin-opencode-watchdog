@@ -1,7 +1,7 @@
 import type { PaperclipPluginManifestV1 } from "@paperclipai/plugin-sdk";
 import { CONFIG_SCHEMA } from "./config.js";
 
-export const VERSION = "0.1.2";
+export const VERSION = "0.2.0";
 
 /**
  * Capability set. Pinned by tests/manifest.spec.ts; changing it needs SecurityEngineer review.
@@ -32,7 +32,7 @@ const manifest: PaperclipPluginManifestV1 = {
   apiVersion: 1,
   version: VERSION,
   displayName: "OpenCode free-model watchdog",
-  description: "Event-driven: when an opencode_local agent's run fails because its model is gone or no longer free, opens one rescue issue for the CTO. Healthy = zero writes.",
+  description: "Event-driven: when an opencode_local agent's run fails because its model is gone or no longer free, opens one rescue issue for the configured rescue agent. Healthy = zero writes.",
   author: "Platform <platform@paperclip.ing>",
   categories: ["automation"],
   capabilities: [...CAPABILITIES],

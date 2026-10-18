@@ -4,6 +4,16 @@ import fixtures from "./fixtures/errors.json" with { type: "json" };
 import { compilePatterns, matchModelError, sanitizeError, DEFAULT_ERROR_PATTERNS } from "../src/detect.js";
 
 describe("AC1 event path", () => {
+  it("rescue body uses the configured rescue agent name and snapshot path", async () => {
+    const t = mk({ agents: [agent(OC), agent(CTO, { name: "Helper" })], cfg: { rescueAgentId: CTO, snapshotDir: "/snaps/" } });
+    await t.engine.onRunFailed(failed());
+    const d = (t.writes[0] as Record<string, string>).description;
+    expect(d).toContain("## Rescue instructions (Helper, Sonnet; never Opus)");
+    expect(d).toContain("— Helper · <ISSUE-KEY>");
+    expect(d).toContain(`--snapshot-file /snaps/${OC}.json`);
+    expect(d).not.toContain("CTO");
+  });
+
   it("matching failure -> exactly one rescue issue, high priority, assigned to CTO", async () => {
     const t = mk();
     const out = await t.engine.onRunFailed(failed());
