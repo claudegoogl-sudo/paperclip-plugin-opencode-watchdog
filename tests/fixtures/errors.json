@@ -32,10 +32,6 @@
  ],
  "negative": [
   {
-   "errorCode": "timeout",
-   "error": "Timed out after 300s"
-  },
-  {
    "errorCode": null,
    "error": "Process exited with code 1"
   },
@@ -52,5 +48,16 @@
    "error": "git push rejected (403) by github.com"
   }
  ],
- "observed": []
+ "observed": [
+  {
+   "errorCode": null,
+   "error": "{\"type\":\"error\",\"error\":{\"name\":\"UnknownError\",\"data\":{\"message\":\"Unexpected server error. Check server logs for details.\"}}}"
+  }
+ ],
+ "timeout": [
+  {
+   "errorCode": "timeout",
+   "error": "Timed out after 300s"
+  }
+ ]
 }

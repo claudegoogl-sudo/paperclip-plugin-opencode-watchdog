@@ -24,7 +24,12 @@ Optional daily check (`proactiveEnabled`, default **off**): job `model-check` (0
 | Free tier ended | `FreeTierError`, `no longer free`, `free ... (tier|usage|model) ... (ended|expired|exceeded|removed)` |
 | Zen HTTP errors | `zen|opencode.ai` near `403|429|5xx` |
 
-Fixtures: `tests/fixtures/errors.json` (positive and negative). Timeouts, exit codes, ENOENT, non-Zen 403s do **not** match.
+| Opencode generic failure | `UnknownError`, `Unexpected server error` (observed on a removed model) |
+| Timeout (0.1.1) | `errorCode=timeout` / `Timed out after Ns` on a watched opencode_local agent raises a rescue with reason `timeout_suspect`. CTO checks the Zen list first and closes with no change if the model is still free. |
+
+**Hang case.** A removed model makes the Paperclip runner hang with no output, so no event fires at all. The event path only works if the watched agent has `adapterConfig.timeoutSec` set (recommend 900). The daily `proactiveEnabled` check is the backstop for hangs. To enable it safely: set `dryRun: true` and `proactiveEnabled: true` with a one-agent `agentAllowlist`, read the `dry_run` / `proactive_healthy` logs, then set `dryRun: false`. Healthy = one GET, zero writes, zero LLM calls.
+
+Fixtures: `tests/fixtures/errors.json` (positive and negative). Exit codes, ENOENT, non-Zen 403s do **not** match.
 
 ## Install
 

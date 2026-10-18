@@ -1,5 +1,5 @@
 import type { WatchdogConfig } from "./config.js";
-import { compilePatterns, matchModelError, sanitizeError } from "./detect.js";
+import { compilePatterns, isTimeout, matchModelError, sanitizeError } from "./detect.js";
 import type { Kv } from "./kv.js";
 import { classifyModel, type ModelSnapshot } from "./zen.js";
 
@@ -60,14 +60,15 @@ export class Engine {
     if (agent.adapterType !== "opencode_local") return this.skip("not_opencode", { agentId });
     const text = `${p.errorCode ?? ""}\n${p.error ?? ""}`;
     const matched = matchModelError(text, compilePatterns(cfg.errorPatterns));
-    if (!matched) return this.skip("not_model_error", { agentId });
+    const timeout = !matched && isTimeout(p.errorCode, p.error);
+    if (!matched && !timeout) return this.skip("not_model_error", { agentId });
     // Loop guard: a failing run that belongs to a rescue issue must never raise another rescue.
     if (typeof p.issueId === "string") {
       const iss = await this.d.getIssue(p.issueId, ev.companyId);
       if (iss?.originId?.startsWith(ORIGIN_PREFIX)) return this.skip("rescue_issue_run", { agentId, issueId: p.issueId });
     }
     return this.rescue(agent, {
-      reason: "run_failed",
+      reason: timeout ? "timeout_suspect" : "run_failed",
       runId: typeof p.runId === "string" ? p.runId : null,
       error: sanitizeError(String(p.error ?? p.errorCode ?? ""), cfg.maxErrorChars),
       matched,
@@ -162,6 +163,9 @@ export function renderBody(i: {
     `## Free models served by Zen now${i.snap ? ` (snapshot ${i.snap.fetchedAt}, ${i.snap.free.length} of ${i.snap.all.length})` : ""}`,
     free,
     "",
+    ...(i.info.reason === "timeout_suspect"
+      ? ["> **Timeout suspect.** The run hit its timeout; a removed model makes `opencode run` hang. This may be a false alarm. First check the Zen list above: if the configured model is still free, close this issue with no change.", ""]
+      : []),
     "## Rescue instructions (CTO, Sonnet; never Opus)",
     "1. If the list above is missing, read it: `GET https://opencode.ai/zen/v1/models`. Free = id ends in `-free`, or `big-pickle`, or cost 0 in https://models.dev/api.json (provider `opencode`).",
     "2. Pick the best currently-free model: same family and size as the current one if possible, tool-use capable.",

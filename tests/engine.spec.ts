@@ -136,3 +136,25 @@ describe("AC4/AC5 proactive check", () => {
     expect(t.writes).toHaveLength(1);
   });
 });
+
+describe("0.1.1 timeout + UnknownError", () => {
+  it("timeout on opencode agent -> one timeout_suspect rescue with check-first note; debounced after", async () => {
+    const t = mk();
+    const ev = failed({ errorCode: "timeout", error: "Timed out after 45s" });
+    expect(await t.engine.onRunFailed(ev)).toMatchObject({ action: "created", reason: "timeout_suspect" });
+    expect(t.writes).toHaveLength(1);
+    expect((t.writes[0] as Record<string, string>).description).toContain("close this issue with no change");
+    expect(await t.engine.onRunFailed(ev)).toMatchObject({ why: "debounced" });
+    expect(t.writes).toHaveLength(1);
+  });
+  it("timeout on non-opencode agent -> none", async () => {
+    const t = mk({ agents: [agent(OC, { adapterType: "claude_local" }), agent(CTO)] });
+    expect(await t.engine.onRunFailed(failed({ errorCode: "timeout", error: "Timed out after 45s" }))).toMatchObject({ why: "not_opencode" });
+    expect(t.writes).toHaveLength(0);
+  });
+  it("observed UnknownError string matches default patterns", () => {
+    const re = compilePatterns(DEFAULT_ERROR_PATTERNS);
+    for (const f of fixtures.observed) expect(matchModelError(`${f.errorCode ?? ""}\n${f.error}`, re)).not.toBeNull();
+    expect(fixtures.observed.length).toBeGreaterThan(0);
+  });
+});

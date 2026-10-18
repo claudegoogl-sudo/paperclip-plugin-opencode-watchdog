@@ -14,9 +14,16 @@ export const DEFAULT_ERROR_PATTERNS: readonly string[] = [
   "FreeTierError",
   "\\bfree\\b.{0,40}\\b(tier|usage|period|model)\\b.{0,60}\\b(ended|expired|exceeded|exhausted|removed|no longer)\\b",
   "no longer free",
+  "\\bUnknownError\\b",
+  "Unexpected server error",
   "(zen|opencode\\.ai).{0,120}\\b(403|429|5\\d\\d)\\b",
   "\\b(403|429|5\\d\\d)\\b.{0,120}(zen|opencode\\.ai)",
 ];
+
+/** Host-enforced timeout (errorCode=timeout / "Timed out after Ns"): a hung opencode run on a removed model looks like this. */
+export function isTimeout(errorCode: unknown, error: unknown): boolean {
+  return String(errorCode ?? "").toLowerCase() === "timeout" || /\btimed out after\b/i.test(String(error ?? ""));
+}
 
 export function compilePatterns(patterns: readonly string[]): RegExp[] {
   const out: RegExp[] = [];
