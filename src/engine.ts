@@ -77,6 +77,7 @@ export class Engine {
       runId: typeof p.runId === "string" ? p.runId : null,
       error: sanitizeError(String(p.error ?? p.errorCode ?? ""), cfg.maxErrorChars),
       matched,
+      failedIssueId: typeof p.issueId === "string" ? p.issueId : null,
     });
   }
 
@@ -166,7 +167,7 @@ export class Engine {
     return { action: "created", issueId: created.id, reason: "new_model" };
   }
 
-  private async rescue(agent: AgentView, info: { reason: string; runId: string | null; error: string; matched: string | null }, known?: ModelSnapshot): Promise<Outcome> {
+  private async rescue(agent: AgentView, info: { reason: string; runId: string | null; error: string; matched: string | null; failedIssueId?: string | null }, known?: ModelSnapshot): Promise<Outcome> {
     const cfg = this.d.cfg();
     const now = this.d.now();
     if (this.inflight.has(agent.id)) return this.skip("in_flight", { agentId: agent.id });
@@ -225,9 +226,9 @@ function snapshotPathIfExists(dir: string | null | undefined, agentId: string): 
 
 export function renderBody(i: {
   agent: AgentView; model: string | null; rescuer: string; rescuerName: string; snapshotPath: string | null; originId: string;
-  info: { reason: string; runId: string | null; error: string; matched: string | null }; snap: ModelSnapshot | null;
+  info: { reason: string; runId: string | null; error: string; matched: string | null; failedIssueId?: string | null }; snap: ModelSnapshot | null;
 }): string {
-  const meta = { agentId: i.agent.id, agentName: i.agent.name, previousModel: i.model, runId: i.info.runId, reason: i.info.reason, rescueKey: i.originId };
+  const meta = { agentId: i.agent.id, agentName: i.agent.name, previousModel: i.model, runId: i.info.runId, failedIssueId: i.info.failedIssueId ?? null, reason: i.info.reason, rescueKey: i.originId };
   const free = i.snap ? i.snap.free.map((m) => `- \`opencode/${m}\``).join("\n") : "_Zen model list unavailable at event time. Fetch it yourself (see step 1)._";
   const health = i.snap ? classifyModel(i.model, i.snap) : null;
   const inList = !i.snap ? "UNKNOWN (list unavailable; fetch it in step 1)" : health === "ok" ? "YES" : "NO";
@@ -263,6 +264,9 @@ export function renderBody(i: {
     "1. If the list above is missing, read it: `GET https://opencode.ai/zen/v1/models`. Free = id ends in `-free`, or `big-pickle`, or cost 0 in https://models.dev/api.json (provider `opencode`).",
     "2. Pick the best currently-free model: same family and size as the current one if possible, tool-use capable.",
     "3. `PATCH /api/agents/<agentId>` with ONLY `{\"adapterConfig\":{\"model\":\"opencode/<id>\"}}`. Do not send the rest of adapterConfig. Touch only the affected agent.",
+    ...(i.info.failedIssueId
+      ? [`3b. **Re-queue the failed task.** The run that failed belonged to issue \`${i.info.failedIssueId}\` and it may now be stuck. Right after the model \`PATCH\` succeeds (2xx): read it with \`GET /api/issues/${i.info.failedIssueId}\`. If its status is \`blocked\` or \`in_progress\` and it is still assigned to this agent, send \`PATCH /api/issues/${i.info.failedIssueId}\` with \`{"status":"todo","comment":"Model replaced by the watchdog rescue; re-queued."}\`. This wakes the assignee. Skip it if the status is \`done\` or \`cancelled\`. Do not do it when you made no model change.`]
+      : []),
     "4. If no free model fits, do NOT run `restore-agent.mjs`: it needs a board key (for `adapterType`) and an agent token can only change the model. Comment on this rescue issue and assign the CTO.",
     i.snapshotPath ? `5. Pre-migration snapshot: \`${i.snapshotPath}\` (for the CTO or a board key holder).` : "5. No snapshot (agent was never migrated); fallback = set a free model, else tell the CTO.",
     "6. The previous model is recorded by the plugin (`previousModel` in the JSON below). To roll back (board key): `node scripts/restore-model.mjs --agent <agentId> --state-file <state.json> --apply`.",
