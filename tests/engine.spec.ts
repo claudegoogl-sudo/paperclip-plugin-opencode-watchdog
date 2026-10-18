@@ -94,6 +94,17 @@ describe("AC1 event path", () => {
     expect(await t.engine.onRunFailed(failed({ issueId: "resc-1" }))).toMatchObject({ why: "rescue_issue_run" });
     expect(t.writes).toHaveLength(0);
   });
+  it("rescue body tells the rescuer to re-queue the failed task; absent without an issue id", async () => {
+    const t = mk({ issues: { "task-9": { status: "blocked" } } });
+    await t.engine.onRunFailed(failed({ issueId: "task-9" }));
+    const body = (t.writes[0] as { description: string }).description;
+    expect(body).toContain("Re-queue the failed task");
+    expect(body).toContain("/api/issues/task-9");
+    expect(body).toContain('"failedIssueId": "task-9"');
+    const u = mk();
+    await u.engine.onRunFailed(failed());
+    expect((u.writes[0] as { description: string }).description).not.toContain("Re-queue the failed task");
+  });
   it("rescue agent's own failure -> none, even when it is opencode_local", async () => {
     const t = mk({ cfg: { rescueAgentId: OC } });
     expect(await t.engine.onRunFailed(failed())).toMatchObject({ why: "rescue_agent_run" });
