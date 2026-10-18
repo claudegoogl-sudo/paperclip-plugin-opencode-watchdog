@@ -3,6 +3,39 @@ import { agent, CO, CTO, failed, mk, OC, SNAP } from "./fake.js";
 import fixtures from "./fixtures/errors.json" with { type: "json" };
 import { compilePatterns, matchModelError, sanitizeError, DEFAULT_ERROR_PATTERNS } from "../src/detect.js";
 
+describe("0.2.1 rescue body", () => {
+  it("snapshot line names the file only when it exists", async () => {
+    const { mkdtempSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const dir = mkdtempSync(`${tmpdir()}/wd-`);
+    writeFileSync(`${dir}/${OC}.json`, "{}");
+    const t = mk({ agents: [agent(OC), agent(CTO, { name: "Helper" })], cfg: { rescueAgentId: CTO, snapshotDir: dir } });
+    await t.engine.onRunFailed(failed());
+    const d = (t.writes[0] as Record<string, string>).description;
+    expect(d).toContain(`${dir}/${OC}.json`);
+    expect(d).not.toContain("No snapshot");
+  });
+  it("READ THIS FIRST has points a-e and model-in-list line is NO + ACTION REQUIRED for unlisted model", async () => {
+    const t = mk({ agents: [agent(OC), agent(CTO, { name: "Helper" })], cfg: { rescueAgentId: CTO } });
+    await t.engine.onRunFailed(failed());
+    const d = (t.writes[0] as Record<string, string>).description;
+    for (const k of ["(a)", "(b)", "(c)", "(d)", "(e)", "EMPTY `adapterConfig`", "MUST `PATCH`"]) expect(d).toContain(k);
+    expect(d).toContain("Current model in Zen free list: ");
+    expect(d.startsWith("# ACTION REQUIRED") === d.includes("Zen free list: NO")).toBe(true);
+    expect(d).toContain("assign the CTO");
+  });
+  it("renderBody YES for listed model, NO for unlisted", async () => {
+    const { renderBody } = await import("../src/engine.js");
+    const base = { agent: agent(OC), rescuer: CTO, rescuerName: "Helper", snapshotPath: null, originId: "x", info: { reason: "run_failed", runId: null, error: "e", matched: null } };
+    const yes = renderBody({ ...base, model: `opencode/${SNAP.free[0]}`, snap: SNAP });
+    expect(yes).toContain("Current model in Zen free list: YES");
+    expect(yes).not.toContain("ACTION REQUIRED");
+    const no = renderBody({ ...base, model: "opencode/gone-model-free", snap: SNAP });
+    expect(no).toContain("Current model in Zen free list: NO");
+    expect(no.startsWith("# ACTION REQUIRED")).toBe(true);
+  });
+});
+
 describe("AC1 event path", () => {
   it("rescue body uses the configured rescue agent name and snapshot path", async () => {
     const t = mk({ agents: [agent(OC), agent(CTO, { name: "Helper" })], cfg: { rescueAgentId: CTO, snapshotDir: "/snaps/" } });
@@ -10,8 +43,8 @@ describe("AC1 event path", () => {
     const d = (t.writes[0] as Record<string, string>).description;
     expect(d).toContain("## Rescue instructions (Helper, Sonnet; never Opus)");
     expect(d).toContain("— Helper · <ISSUE-KEY>");
-    expect(d).toContain(`--snapshot-file /snaps/${OC}.json`);
-    expect(d).not.toContain("CTO");
+    expect(d).toContain("## READ THIS FIRST");
+    expect(d).toContain("No snapshot (agent was never migrated)");
   });
 
   it("matching failure -> exactly one rescue issue, high priority, assigned to CTO", async () => {

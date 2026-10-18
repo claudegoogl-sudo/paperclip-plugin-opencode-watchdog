@@ -1,5 +1,6 @@
 import type { WatchdogConfig } from "./config.js";
 import { compilePatterns, isTimeout, matchModelError, sanitizeError } from "./detect.js";
+import { existsSync } from "node:fs";
 import type { Kv } from "./kv.js";
 import { classifyModel, type ModelSnapshot } from "./zen.js";
 
@@ -117,7 +118,7 @@ export class Engine {
       const model = typeof agent.adapterConfig?.model === "string" ? agent.adapterConfig.model : null;
       const bucket = hourBucket(now, cfg.debounceHours);
       const originId = `${ORIGIN_PREFIX}${agent.id}:${bucket}`;
-      const description = renderBody({ agent, model, info, snap, rescuer, rescuerName: rescuerInfo.name, snapshotPath: cfg.snapshotDir ? `${cfg.snapshotDir.replace(/\/+$/, "")}/${agent.id}.json` : null, originId });
+      const description = renderBody({ agent, model, info, snap, rescuer, rescuerName: rescuerInfo.name, snapshotPath: snapshotPathIfExists(cfg.snapshotDir, agent.id), originId });
       const title = `Rescue: opencode model unavailable for ${agent.name} (${model ?? "no model set"})`;
       if (cfg.dryRun) {
         this.d.log("opencode_watchdog.dry_run", { agentId: agent.id, reason: info.reason, title });
@@ -148,18 +149,36 @@ export class Engine {
   }
 }
 
+function snapshotPathIfExists(dir: string | null | undefined, agentId: string): string | null {
+  if (!dir) return null;
+  const path = `${dir.replace(/\/+$/, "")}/${agentId}.json`;
+  try { return existsSync(path) ? path : null; } catch { return null; }
+}
+
 export function renderBody(i: {
   agent: AgentView; model: string | null; rescuer: string; rescuerName: string; snapshotPath: string | null; originId: string;
   info: { reason: string; runId: string | null; error: string; matched: string | null }; snap: ModelSnapshot | null;
 }): string {
   const meta = { agentId: i.agent.id, agentName: i.agent.name, previousModel: i.model, runId: i.info.runId, reason: i.info.reason, rescueKey: i.originId };
   const free = i.snap ? i.snap.free.map((m) => `- \`opencode/${m}\``).join("\n") : "_Zen model list unavailable at event time. Fetch it yourself (see step 1)._";
+  const health = i.snap ? classifyModel(i.model, i.snap) : null;
+  const inList = !i.snap ? "UNKNOWN (list unavailable; fetch it in step 1)" : health === "ok" ? "YES" : "NO";
+  const action = inList === "NO";
   return [
+    ...(action ? ["# ACTION REQUIRED", ""] : []),
     `Automatic rescue request from the opencode free-model watchdog. Reason: **${i.info.reason}**.`,
+    "",
+    "## READ THIS FIRST",
+    "- (a) `GET /api/agents/<id>` shows an EMPTY `adapterConfig` to agents. This is expected (config is redacted). It is NOT evidence that the model is fine or gone.",
+    "- (b) The Facts section and the Zen list below are the source of truth (current model, error, Zen list snapshot).",
+    "- (c) Decide from the Zen list: if the current model id is not in the list, or is no longer free, this is a real failure and you MUST `PATCH`.",
+    "- (d) The `PATCH` sends ONLY `{\"adapterConfig\":{\"model\":\"opencode/<id>\"}}`. The server merges it. Agents may only change `model` / `fallbackModel` on another agent. Check the result by the `PATCH` response status and the next run, not by reading `adapterConfig`.",
+    "- (e) You may close this rescue without a `PATCH` only if the current model IS in the Zen free list.",
     "",
     "## Facts",
     `- Agent: ${i.agent.name} (\`${i.agent.id}\`), adapter \`opencode_local\``,
     `- Current model: \`${i.model ?? "(none)"}\``,
+    `- Current model in Zen free list: ${inList}`,
     `- Failed run: ${i.info.runId ? `\`${i.info.runId}\`` : "n/a (proactive check)"}`,
     "- Error (truncated, redacted):",
     "```text",
@@ -175,10 +194,10 @@ export function renderBody(i: {
     `## Rescue instructions (${i.rescuerName}, Sonnet; never Opus)`,
     "1. If the list above is missing, read it: `GET https://opencode.ai/zen/v1/models`. Free = id ends in `-free`, or `big-pickle`, or cost 0 in https://models.dev/api.json (provider `opencode`).",
     "2. Pick the best currently-free model: same family and size as the current one if possible, tool-use capable.",
-    "3. `PATCH /api/agents/<agentId>` and change ONLY `adapterConfig.model` (send the full existing adapterConfig with the one field changed). Touch only the affected agent.",
-    `4. If no free model fits, restore the agent from its pre-migration snapshot: \`node scripts/restore-agent.mjs --agent ${i.agent.id} --snapshot-file ${i.snapshotPath ?? "<path>"} --apply\`.`,
-    "5. `GET` the agent again and diff before/after. Post the diff proving only that field changed.",
-    "6. The previous model is recorded by the plugin (`previousModel` in its state, also in the JSON below). To roll back: `node scripts/restore-model.mjs --agent <agentId> --state-file <state.json> --apply`.",
+    "3. `PATCH /api/agents/<agentId>` with ONLY `{\"adapterConfig\":{\"model\":\"opencode/<id>\"}}`. Do not send the rest of adapterConfig. Touch only the affected agent.",
+    "4. If no free model fits, do NOT run `restore-agent.mjs`: it needs a board key (for `adapterType`) and an agent token can only change the model. Comment on this rescue issue and assign the CTO.",
+    i.snapshotPath ? `5. Pre-migration snapshot: \`${i.snapshotPath}\` (for the CTO or a board key holder).` : "5. No snapshot (agent was never migrated); fallback = set a free model, else tell the CTO.",
+    "6. The previous model is recorded by the plugin (`previousModel` in the JSON below). To roll back (board key): `node scripts/restore-model.mjs --agent <agentId> --state-file <state.json> --apply`.",
     `7. Post an operator comment that starts with \`[[operator-deliver]]\` and ends with the footer \`— ${i.rescuerName} · <ISSUE-KEY>\`.`,
     "",
     "<details><summary>machine-readable</summary>",
