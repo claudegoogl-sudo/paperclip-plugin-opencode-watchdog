@@ -17,13 +17,15 @@ export interface WatchdogConfig {
   /** Optional catalog used to also treat cost-0 models as free. null disables it. */
   modelsDevUrl: string | null;
   maxErrorChars: number;
+  /** Directory of pre-migration agent snapshots; named in the rescue body only. */
+  snapshotDir: string | null;
   /** Log what would be created, write nothing. */
   dryRun: boolean;
 }
 
 export const DEFAULT_CONFIG: WatchdogConfig = {
   rescueAgentId: null,
-  rescueAgentName: "CTO",
+  rescueAgentName: "Concierge",
   errorPatterns: [...DEFAULT_ERROR_PATTERNS],
   debounceHours: 1,
   agentAllowlist: [],
@@ -31,6 +33,7 @@ export const DEFAULT_CONFIG: WatchdogConfig = {
   zenModelsUrl: "https://opencode.ai/zen/v1/models",
   modelsDevUrl: "https://models.dev/api.json",
   maxErrorChars: 800,
+  snapshotDir: null,
   dryRun: false,
 };
 
@@ -52,6 +55,7 @@ export function parseConfig(raw: unknown): WatchdogConfig {
     zenModelsUrl: https(r.zenModelsUrl, d.zenModelsUrl) ?? d.zenModelsUrl,
     modelsDevUrl: r.modelsDevUrl === null ? null : https(r.modelsDevUrl, d.modelsDevUrl),
     maxErrorChars: typeof r.maxErrorChars === "number" && r.maxErrorChars >= 100 && r.maxErrorChars <= 4000 ? r.maxErrorChars : d.maxErrorChars,
+    snapshotDir: typeof r.snapshotDir === "string" && r.snapshotDir.trim() && r.snapshotDir.length <= 300 ? r.snapshotDir.trim() : null,
     dryRun: r.dryRun === true,
   };
 }
@@ -60,8 +64,8 @@ export const CONFIG_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
-    rescueAgentId: { type: "string", format: "uuid", title: "Rescue agent id (CTO)" },
-    rescueAgentName: { type: "string", default: "CTO", title: "Rescue agent name (used when no id is set)" },
+    rescueAgentId: { type: "string", format: "uuid", title: "Rescue agent id" },
+    rescueAgentName: { type: "string", default: "Concierge", title: "Rescue agent name (used when no id is set)" },
     errorPatterns: { type: "array", items: { type: "string" }, title: "Model-unavailable error regexes (case-insensitive)" },
     debounceHours: { type: "number", minimum: 0.01, maximum: 168, default: 1, title: "Max one rescue per agent per N hours" },
     agentAllowlist: { type: "array", items: { type: "string", format: "uuid" }, title: "Only watch these agents (empty = all opencode_local agents)" },
@@ -69,6 +73,7 @@ export const CONFIG_SCHEMA = {
     zenModelsUrl: { type: "string", default: DEFAULT_CONFIG.zenModelsUrl },
     modelsDevUrl: { type: ["string", "null"], default: DEFAULT_CONFIG.modelsDevUrl },
     maxErrorChars: { type: "number", minimum: 100, maximum: 4000, default: 800 },
+    snapshotDir: { type: ["string", "null"], default: null, title: "Directory of pre-migration agent snapshots (<dir>/<agentId>.json)" },
     dryRun: { type: "boolean", default: false, title: "Dry run: log, create nothing" },
   },
 } as const;
